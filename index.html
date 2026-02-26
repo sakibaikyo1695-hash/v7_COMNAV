@@ -1,0 +1,899 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>SLAP-GAP | Naval Aviation Ops</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a1628">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --bg-dark: #0a1628;
+    --bg-panel: #0d1f3c;
+    --bg-card: #112244;
+    --border: #1e3a5f;
+    --accent: #2a9df4;
+    --accent2: #00e5ff;
+    --green: #00e676;
+    --red: #ff1744;
+    --orange: #ff9100;
+    --purple: #d500f9;
+    --yellow: #ffd600;
+    --text: #cde4ff;
+    --text-dim: #7aa0c4;
+    --sidebar: 420px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; padding: 0;
+    font-family: 'Courier New', monospace;
+    background: var(--bg-dark);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── MAP ── */
+  #map {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    right: var(--sidebar);
+  }
+
+  /* ── MAP OVERLAY BUTTONS ── */
+  #mapToggleBtn {
+    position: absolute; top: 16px; left: 16px; z-index: 1000;
+    background: #1a7a35; border: 2px solid var(--green);
+    padding: 14px 22px; font-weight: bold; font-size: 17px;
+    box-shadow: 0 0 15px rgba(0,230,118,0.3);
+    letter-spacing: 1px;
+  }
+  #measureBtn {
+    position: absolute; top: 90px; left: 16px; z-index: 1000;
+    background: #7b00a0; border: 2px solid var(--purple);
+    padding: 14px 22px; font-size: 17px;
+    box-shadow: 0 0 12px rgba(213,0,249,0.3);
+  }
+  #stopMeasureBtn {
+    position: absolute; top: 164px; left: 16px; z-index: 1000;
+    background: #8a0020; border: 2px solid var(--red);
+    padding: 14px 22px; font-size: 17px;
+    display: none;
+    box-shadow: 0 0 12px rgba(255,23,68,0.3);
+  }
+
+  /* ── MEASUREMENT OVERLAY ── */
+  #measurementInfo {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(5,10,25,0.96);
+    border: 2px solid var(--purple);
+    color: white; padding: 18px 32px;
+    border-radius: 10px; font-size: 18px;
+    z-index: 3000; display: none;
+    box-shadow: 0 0 30px rgba(213,0,249,0.4);
+    pointer-events: none; min-width: 360px;
+    letter-spacing: 0.5px;
+  }
+  #measurementInfo .measure-label { font-weight: bold; color: var(--yellow); display: inline-block; width: 160px; }
+  #measurementInfo .measure-value { color: #fff; font-size: 20px; font-weight: bold; }
+  #measurementInfo div { margin: 6px 0; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: var(--sidebar);
+    background: var(--bg-panel);
+    border-left: 2px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scrollbar */
+  #sidebar::-webkit-scrollbar { width: 8px; }
+  #sidebar::-webkit-scrollbar-track { background: var(--bg-dark); }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── HEADER ── */
+  #sidebarHeader {
+    background: linear-gradient(180deg, #071428 0%, var(--bg-panel) 100%);
+    border-bottom: 2px solid var(--accent);
+    padding: 18px 20px 14px;
+    text-align: center;
+    flex-shrink: 0;
+    box-shadow: 0 4px 20px rgba(42,157,244,0.2);
+  }
+  #sidebarHeader h2 {
+    margin: 0; font-size: 20px; letter-spacing: 3px;
+    color: var(--accent2);
+    text-shadow: 0 0 12px rgba(0,229,255,0.6);
+  }
+  #sidebarHeader .tagline {
+    font-size: 11px; color: var(--text-dim); letter-spacing: 2px;
+    margin-top: 4px;
+  }
+  #credit {
+    font-size: 11px; color: var(--accent); letter-spacing: 1.5px;
+    margin-top: 6px; font-weight: bold;
+  }
+
+  /* ── SECTION ── */
+  .section {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 18px;
+  }
+  .section-title {
+    font-size: 11px; letter-spacing: 3px; font-weight: bold;
+    color: var(--accent2); margin-bottom: 12px;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 14px;
+    background: var(--accent2);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent2);
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-block;
+    padding: 10px 14px;
+    margin: 4px 3px;
+    background: var(--accent);
+    color: white;
+    border-radius: 5px;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    border: 1px solid rgba(255,255,255,0.15);
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.2); box-shadow: 0 0 10px rgba(42,157,244,0.4); }
+  .btn.small { padding: 6px 10px; font-size: 12px; }
+  .btn-block { display: block; width: 100%; margin: 5px 0; text-align: center; }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-row .btn { flex: 1; min-width: 0; text-align: center; }
+
+  .btn-green  { background: #1a5c2a; border-color: var(--green);  color: var(--green);  }
+  .btn-red    { background: #5c0010; border-color: var(--red);    color: var(--red);    }
+  .btn-orange { background: #5c2e00; border-color: var(--orange); color: var(--orange); }
+  .btn-purple { background: #3a0050; border-color: var(--purple); color: var(--purple); }
+  .btn-yellow { background: #4a3a00; border-color: var(--yellow); color: var(--yellow); }
+  .btn-gray   { background: #2a3040; border-color: #556; color: #aac; }
+  .btn-teal   { background: #003a40; border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── INPUTS ── */
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    width: 100%; padding: 10px 12px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    border-radius: 4px;
+    margin: 4px 0;
+    outline: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(42,157,244,0.3);
+  }
+  label {
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 1px; display: block; margin-top: 6px;
+  }
+
+  .coord-input-group { display: flex; gap: 5px; }
+  .coord-input-group > div { flex: 1; }
+  .coord-input-group .dir { flex: 0 0 68px; }
+
+  /* ── STATUS DISPLAY ── */
+  #gpsInfo, #movingTrackInfo, #routeSummary, #coordsOut {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  #gpsInfo { border-left: 3px solid var(--accent2); display: none; }
+  #movingTrackInfo { border-left: 3px solid var(--green); display: none; }
+  #routeSummary { border-left: 3px solid var(--orange); font-size: 13px; }
+  #coordsOut { border-left: 3px solid var(--accent); font-size: 13px; color: var(--text-dim); }
+
+  .gps-label, .track-label { font-weight: bold; color: var(--accent2); display: inline-block; min-width: 160px; font-size: 12px; letter-spacing: 1px; }
+  .gps-value, .track-value { color: var(--text); font-weight: bold; }
+  .track-label { color: var(--green); }
+
+  /* ── WAYPOINT ITEMS ── */
+  .waypoint-item {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin: 5px 0;
+  }
+  .waypoint-item:hover { border-color: var(--accent); }
+  .area-item {
+    background: var(--bg-dark);
+    border: 1px solid #2a1a5c;
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin: 5px 0;
+  }
+  .info-text { font-size: 11px; color: var(--text-dim); font-style: italic; margin-top: 3px; }
+
+  /* ── PASSWORD SCREEN ── */
+  #passwordScreen {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, var(--bg-dark) 0%, #071428 50%, #0a0a20 100%);
+    z-index: 99999;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #passwordScreen .password-box {
+    background: var(--bg-panel);
+    border: 2px solid var(--accent);
+    padding: 50px 60px;
+    border-radius: 12px;
+    max-width: 480px; width: 90%;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(42,157,244,0.3);
+  }
+  #passwordScreen h2 { margin: 0 0 10px; color: var(--accent2); font-size: 26px; letter-spacing: 3px; }
+  #passwordScreen p { color: var(--text-dim); font-size: 15px; letter-spacing: 1px; }
+  #passwordScreen input[type=password] {
+    font-size: 18px; padding: 14px; margin: 18px 0 10px;
+    text-align: center; letter-spacing: 4px;
+  }
+  #passwordScreen .btn { padding: 14px 40px; font-size: 17px; margin-top: 10px; letter-spacing: 2px; }
+  #passwordScreen .error { color: var(--red); margin-top: 12px; display: none; font-size: 14px; }
+  #passwordScreen .info { font-size: 12px; color: var(--text-dim); margin-top: 14px; letter-spacing: 1px; }
+  #passwordScreen .logo { font-size: 48px; margin-bottom: 16px; }
+
+  /* ── INSECURE OVERLAY ── */
+  #insecureOverlay {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.8); z-index: 9999; display: none;
+    color: #fff; padding: 20px;
+  }
+  #insecureOverlay .box {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    padding: 20px; border-radius: 8px; max-width: 720px; margin: auto;
+  }
+  #insecureOverlay a { color: var(--accent2); }
+
+  /* ── MODALS ── */
+  .modal-overlay {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+    background: rgba(0,0,10,0.88); z-index: 10000;
+    display: none; padding: 20px; overflow: auto;
+  }
+  .modal-content {
+    background: var(--bg-panel);
+    border: 2px solid var(--accent);
+    padding: 28px;
+    border-radius: 10px;
+    max-width: 560px; margin: 40px auto;
+    max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 0 40px rgba(42,157,244,0.3);
+    color: var(--text);
+  }
+  .modal-content h3 { margin-top: 0; color: var(--accent2); letter-spacing: 2px; font-size: 18px; }
+  #tapConfirmModal .modal-content { max-width: 420px; margin: 15% auto; }
+
+  /* Area modal overrides */
+  #areaModal input, #areaModal textarea, #areaModal select { margin-bottom: 8px; }
+  #cornerInputs { margin: 10px 0; }
+  .corner-input { margin-bottom: 10px; }
+
+  /* ── COLOR SELECTORS ── */
+  .color-selector, .circular-color-selector { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+  .color-option, .circular-color-option {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.2);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .color-option:hover, .circular-color-option:hover { transform: scale(1.15); }
+  .color-option.selected, .circular-color-option.selected {
+    border-color: #fff; border-width: 4px;
+    box-shadow: 0 0 14px rgba(255,255,255,0.5);
+  }
+
+  /* ── MARKER TYPE GRID ── */
+  .marker-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .marker-type-option {
+    border: 2px solid var(--border); padding: 10px; text-align: center;
+    cursor: pointer; border-radius: 6px; transition: all 0.2s;
+    background: var(--bg-dark);
+  }
+  .marker-type-option:hover { background: var(--bg-card); }
+  .marker-type-option.selected { border-color: var(--accent); background: rgba(42,157,244,0.15); }
+  .marker-icon-preview { font-size: 22px; margin-bottom: 4px; }
+  .marker-type-label { font-size: 11px; color: var(--text-dim); }
+  .custom-marker { background: transparent; border: none; }
+
+  /* ── AREA TYPE SELECTOR ── */
+  .area-type-selector { display: flex; gap: 10px; margin: 15px 0; }
+  .area-type-option {
+    flex: 1; padding: 16px; border: 2px solid var(--border);
+    border-radius: 8px; cursor: pointer; text-align: center;
+    transition: all 0.2s; background: var(--bg-dark);
+    color: var(--text-dim);
+  }
+  .area-type-option:hover { background: var(--bg-card); }
+  .area-type-option.selected { border-color: var(--accent); background: rgba(42,157,244,0.15); color: var(--text); font-weight: bold; }
+
+  /* ── EXPORT MODAL ── */
+  .export-option {
+    padding: 12px 16px; margin: 8px 0;
+    border: 2px solid var(--border); border-radius: 6px;
+    cursor: pointer; transition: all 0.2s;
+    background: var(--bg-dark); color: var(--text);
+  }
+  .export-option:hover { border-color: var(--accent); background: var(--bg-card); }
+  .export-option.selected { background: rgba(42,157,244,0.15); border-color: var(--accent); font-weight: bold; }
+  .export-option small { color: var(--text-dim); }
+
+  .selection-section {
+    margin-top: 14px; padding: 14px;
+    background: var(--bg-dark); border-radius: 6px; display: none;
+    border: 1px solid var(--border);
+  }
+  .selection-section h4 { margin-top: 0; color: var(--text-dim); font-size: 13px; }
+  .checkbox-list {
+    max-height: 200px; overflow-y: auto;
+    border: 1px solid var(--border); padding: 10px;
+    background: var(--bg-panel); border-radius: 4px;
+  }
+  .checkbox-item { padding: 7px; margin: 4px 0; cursor: pointer; border-radius: 3px; }
+  .checkbox-item:hover { background: var(--bg-card); }
+  .checkbox-item input { margin-right: 8px; }
+  .select-all-btn { font-size: 12px; padding: 5px 10px; margin-bottom: 8px; }
+
+  /* ── LIST MODALS ── */
+  .modal-list-item {
+    border-bottom: 1px solid var(--border);
+    padding: 12px; margin-bottom: 4px;
+    background: var(--bg-dark); border-radius: 4px;
+  }
+  .modal-list-item:hover { background: var(--bg-card); }
+  .modal-list-item .waypoint-actions { margin-top: 6px; }
+
+  /* ── SPEED INPUT ── */
+  #speedInput { display: inline; width: 100px !important; }
+
+  /* ── LEAFLET OVERRIDES ── */
+  .leaflet-control-zoom a {
+    background: var(--bg-panel) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+    font-size: 20px !important;
+    width: 44px !important; height: 44px !important;
+    line-height: 44px !important;
+  }
+  .leaflet-control-attribution { background: rgba(0,0,0,0.7) !important; color: #667 !important; }
+  .area-label {
+    background: rgba(0,0,20,0.85) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+    font-weight: bold; letter-spacing: 1px;
+  }
+
+  /* ── RESPONSIVE for smaller TV-attached tablets ── */
+  @media (max-width: 1280px) {
+    :root { --sidebar: 360px; }
+    .btn { font-size: 13px; padding: 9px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PASSWORD SCREEN -->
+<div id="passwordScreen">
+  <div class="password-box">
+    <div class="logo">🔐</div>
+    <h2>SECURE ACCESS</h2>
+    <p>Naval Aviation Operations System</p>
+    <input type="password" id="passwordInput" placeholder="ENTER PASSWORD"/>
+    <br>
+    <button class="btn" id="passwordSubmit" style="background:#1a4a8a;border-color:var(--accent);">AUTHENTICATE</button>
+    <div class="error" id="passwordError">❌ ACCESS DENIED — Incorrect password</div>
+    <div class="info">Session will remain active on this terminal</div>
+  </div>
+</div>
+
+<!-- MEASUREMENT OVERLAY -->
+<div id="measurementInfo">
+  <div><span class="measure-label">DISTANCE:</span> <span class="measure-value" id="measureDist">--</span></div>
+  <div><span class="measure-label">BEARING A→B:</span> <span class="measure-value" id="measureBrgAB">--</span></div>
+  <div><span class="measure-label">BEARING B→A:</span> <span class="measure-value" id="measureBrgBA">--</span></div>
+</div>
+
+<!-- MAP -->
+<div id="map">
+  <button id="mapToggleBtn" class="btn">🛰️ SATELLITE</button>
+  <button id="measureBtn" class="btn">📏 MEASURE</button>
+  <button id="stopMeasureBtn" class="btn">⏹ STOP MEASURE</button>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+
+  <!-- Header -->
+  <div id="sidebarHeader">
+    <h2>✈ SLAP-GAP</h2>
+    <div class="tagline">AIR NAVIGATION — WAYPOINTS PRO</div>
+    <div id="credit">LT CDR SADMAN · P NO 3223</div>
+  </div>
+
+  <!-- Coordinate Jump -->
+  <div class="section">
+    <div class="section-title">📍 JUMP TO COORDINATES</div>
+    <div class="coord-input-group">
+      <div><label>LAT DEG</label><input id="latDeg" type="number" placeholder="23"/></div>
+      <div><label>LAT MIN</label><input id="latMin" type="number" step="0.001" placeholder="41.100"/></div>
+      <div class="dir"><label>N/S</label><select id="latDir"><option value="N">N</option><option value="S">S</option></select></div>
+    </div>
+    <div class="coord-input-group">
+      <div><label>LON DEG</label><input id="lonDeg" type="number" placeholder="90"/></div>
+      <div><label>LON MIN</label><input id="lonMin" type="number" step="0.001" placeholder="21.378"/></div>
+      <div class="dir"><label>E/W</label><select id="lonDir"><option value="E">E</option><option value="W">W</option></select></div>
+    </div>
+    <a id="goBtn" class="btn btn-block" style="background:#1a3a6a;border:1px solid var(--accent);text-align:center;margin-top:6px;">🎯 GO / ADD WAYPOINT</a>
+  </div>
+
+  <!-- Waypoints -->
+  <div class="section">
+    <div class="section-title">📌 WAYPOINTS
+      <a id="showWaypointListBtn" class="btn small btn-teal" style="margin-left:auto;margin-bottom:0;">VIEW LIST</a>
+    </div>
+    <div>
+      <label>SPEED (KNOTS, FOR ETA):</label>
+      <input id="speedInput" type="text" placeholder="e.g. 120"/>
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <a id="routeBtn" class="btn btn-orange">📡 ROUTE</a>
+      <a id="clearRouteBtn" class="btn btn-gray">✖ CLEAR</a>
+    </div>
+  </div>
+
+  <!-- Flying Modes -->
+  <div class="section">
+    <div class="section-title">🚁 FLYING / DIRECT-TO MODES</div>
+    <div class="btn-row">
+      <a id="startFlyBtn" class="btn btn-green">▶ START FLYING</a>
+      <a id="stopFlyBtn" class="btn btn-red">■ STOP FLYING</a>
+    </div>
+    <div id="gpsInfo">
+      <div><span class="gps-label">GPS SPEED:</span> <span class="gps-value" id="gpsSpeed">-- kts</span></div>
+      <div><span class="gps-label">COURSE OVER GND:</span> <span class="gps-value" id="gpsCourse">--°</span></div>
+    </div>
+
+    <!-- Moving Track -->
+    <div style="margin-top:10px;">
+      <label style="color:var(--green);letter-spacing:2px;">MOVING TRACK (FLYING MODE ONLY)</label>
+      <div class="btn-row" style="margin-top:6px;">
+        <a id="movingTrackOnBtn" class="btn btn-green">📡 TRACK ON</a>
+        <a id="movingTrackOffBtn" class="btn btn-red">📡 TRACK OFF</a>
+      </div>
+      <div id="movingTrackInfo">
+        <div><span class="track-label">20-MIN TRACK:</span> <span class="track-value" id="trackDistance">-- NM</span></div>
+        <div><span class="track-label">COURSE:</span> <span class="track-value" id="trackCourse">--°</span></div>
+        <div><span class="track-label">SPEED:</span> <span class="track-value" id="trackSpeed">-- kts</span></div>
+      </div>
+    </div>
+
+    <!-- Direct-To -->
+    <div style="margin-top:10px;">
+      <label style="color:var(--purple);letter-spacing:2px;">DIRECT-TO WAYPOINT</label>
+      <select id="directSelect" style="margin-top:5px;"><option value="">Select Waypoint</option></select>
+      <div class="btn-row" style="margin-top:6px;">
+        <a id="startDirectBtn" class="btn btn-purple">▶ START</a>
+        <a id="stopDirectBtn" class="btn btn-red">■ STOP</a>
+      </div>
+      <a id="recenterBtn" class="btn btn-block btn-green" style="margin-top:6px;">🎯 RE-CENTER MAP</a>
+    </div>
+  </div>
+
+  <!-- Area Management -->
+  <div class="section">
+    <div class="section-title">🗺️ AREA MANAGEMENT
+      <a id="showAreaListBtn" class="btn small btn-teal" style="margin-left:auto;margin-bottom:0;">VIEW LIST</a>
+    </div>
+    <a id="createAreaBtn" class="btn btn-block btn-purple" style="margin-bottom:8px;">➕ CREATE AREA</a>
+    <label>EDIT AREA:</label>
+    <select id="editAreaSelect"><option value="">Select Area to Edit</option></select>
+    <a id="editAreaBtn" class="btn btn-block btn-orange" style="margin:4px 0;">✏️ EDIT SELECTED</a>
+    <label>DELETE AREA:</label>
+    <select id="deleteAreaSelect"><option value="">Select Area to Delete</option></select>
+    <a id="deleteAreaBtn" class="btn btn-block btn-red" style="margin-top:4px;">🗑️ DELETE SELECTED</a>
+  </div>
+
+  <!-- Import/Export -->
+  <div class="section">
+    <div class="section-title">💾 DATA MANAGEMENT</div>
+    <div class="btn-row">
+      <a id="saveBtn" class="btn btn-green">💾 SAVE</a>
+      <a id="exportBtn" class="btn btn-gray">📤 EXPORT</a>
+      <a id="importBtn" class="btn btn-yellow">📥 IMPORT</a>
+    </div>
+    <textarea id="jsonArea" rows="3" placeholder="Paste JSON here to import..."></textarea>
+  </div>
+
+  <!-- Status -->
+  <div class="section">
+    <div class="section-title">📡 STATUS</div>
+    <label>CURRENT COORDS:</label>
+    <div id="coordsOut">None</div>
+    <div id="routeSummary"></div>
+  </div>
+
+</div><!-- /sidebar -->
+
+<!-- TAP CONFIRM MODAL -->
+<div id="tapConfirmModal" class="modal-overlay">
+  <div class="modal-content">
+    <h3>📍 LOCATION TAPPED</h3>
+    <p><strong>COORDINATES:</strong></p>
+    <p id="tapCoords" style="color:var(--accent2);font-size:16px;"></p>
+    <p style="color:var(--text-dim);">Save this location as a waypoint?</p>
+    <div style="margin-top:18px;" class="btn-row">
+      <button class="btn btn-green" id="confirmWaypointBtn">✔ YES — CREATE WAYPOINT</button>
+      <button class="btn btn-red" id="cancelWaypointBtn">✖ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- WAYPOINT LIST MODAL -->
+<div id="waypointListModal" class="modal-overlay">
+  <div class="modal-content" style="max-width:680px;">
+    <h3>📍 WAYPOINTS LIST <button class="btn small btn-red" id="closeWaypointListBtn" style="float:right">CLOSE</button></h3>
+    <div id="waypointListContent" style="max-height:60vh;overflow-y:auto;margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- AREA LIST MODAL -->
+<div id="areaListModal" class="modal-overlay">
+  <div class="modal-content" style="max-width:680px;">
+    <h3>🗺️ AREAS LIST <button class="btn small btn-red" id="closeAreaListBtn" style="float:right">CLOSE</button></h3>
+    <div id="areaListContent" style="max-height:60vh;overflow-y:auto;margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- AREA MODAL -->
+<div id="areaModal" class="modal-overlay">
+  <div class="modal-content">
+    <h3 id="modalTitle">CREATE NEW AREA</h3>
+    <div class="area-type-selector" id="areaTypeSelector">
+      <div class="area-type-option selected" data-type="polygon">
+        <div style="font-size:28px">📐</div>
+        <div><strong>POLYGON</strong></div>
+        <small>Define corners with coordinates</small>
+      </div>
+      <div class="area-type-option" data-type="circular">
+        <div style="font-size:28px">⭕</div>
+        <div><strong>CIRCULAR</strong></div>
+        <small>Around a waypoint</small>
+      </div>
+    </div>
+
+    <!-- Polygon Section -->
+    <div id="polygonSection">
+      <label>NUMBER OF CORNERS:</label>
+      <input type="number" id="numCorners" min="3" placeholder="e.g., 4"/>
+      <a id="setCornerBtn" class="btn" style="margin-top:6px;">SET CORNERS</a>
+      <div id="cornerInputs"></div>
+      <div id="nameSection" style="display:none">
+        <label>AREA NAME:</label>
+        <input type="text" id="areaName" placeholder="Enter area name"/>
+        <label>AREA COLOR:</label>
+        <div class="color-selector">
+          <div class="color-option selected" data-color="#dc3545" style="background:#dc3545" title="Red"></div>
+          <div class="color-option" data-color="#0d6efd" style="background:#0d6efd" title="Blue"></div>
+          <div class="color-option" data-color="#8b45c1" style="background:#8b45c1" title="Purple"></div>
+          <div class="color-option" data-color="#ffc107" style="background:#ffc107" title="Yellow"></div>
+        </div>
+        <label>AREA INFO/NOTES:</label>
+        <textarea id="areaInfo" rows="3" placeholder="Enter information about this area..."></textarea>
+        <div class="btn-row" style="margin-top:10px;">
+          <a id="saveAreaBtn" class="btn btn-green">💾 SAVE AREA</a>
+          <a id="cancelAreaBtn" class="btn btn-red">✖ CANCEL</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Circular Section -->
+    <div id="circularSection" style="display:none">
+      <label>SELECT WAYPOINT (CENTER):</label>
+      <select id="circularWaypointSelect"><option value="">Choose waypoint as center</option></select>
+      <label>DIAMETER (NAUTICAL MILES):</label>
+      <input type="number" id="circularDiameter" step="0.1" min="0.1" placeholder="e.g., 5.0"/>
+      <label>AREA NAME:</label>
+      <input type="text" id="circularAreaName" placeholder="Enter area name"/>
+      <label>CIRCLE COLOR:</label>
+      <div class="circular-color-selector">
+        <div class="circular-color-option selected" data-color="#ff0000" style="background:#ff0000" title="Red"></div>
+        <div class="circular-color-option" data-color="#00ff00" style="background:#00ff00" title="Green"></div>
+        <div class="circular-color-option" data-color="#0000ff" style="background:#0000ff" title="Blue"></div>
+        <div class="circular-color-option" data-color="#ffff00" style="background:#ffff00" title="Yellow"></div>
+        <div class="circular-color-option" data-color="#ff00ff" style="background:#ff00ff" title="Magenta"></div>
+      </div>
+      <label>AREA INFO/NOTES:</label>
+      <textarea id="circularAreaInfo" rows="3" placeholder="Enter information about this area..."></textarea>
+      <div class="btn-row" style="margin-top:10px;">
+        <a id="saveCircularAreaBtn" class="btn btn-green">💾 SAVE CIRCULAR AREA</a>
+        <a id="cancelCircularAreaBtn" class="btn btn-red">✖ CANCEL</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="exportModal" class="modal-overlay">
+  <div class="modal-content" style="max-width:620px;">
+    <h3>📤 EXPORT OPTIONS</h3>
+    <p style="font-size:13px;color:var(--text-dim);">Choose what to export:</p>
+    <div class="export-option" data-type="all"><strong>📦 Export All</strong><br><small>All waypoints and areas</small></div>
+    <div class="export-option" data-type="waypoints-only"><strong>📍 Waypoints Only</strong><br><small>All waypoints, no areas</small></div>
+    <div class="export-option" data-type="areas-only"><strong>🗺️ Areas Only</strong><br><small>All areas, no waypoints</small></div>
+    <div class="export-option" data-type="selected-waypoints"><strong>✅ Selected Waypoints</strong><br><small>Choose specific waypoints</small></div>
+    <div class="export-option" data-type="selected-areas"><strong>✅ Selected Areas</strong><br><small>Choose specific areas</small></div>
+    <div class="export-option" data-type="custom"><strong>🎯 Custom Selection</strong><br><small>Pick waypoints and areas</small></div>
+
+    <div class="selection-section" id="waypointSelection">
+      <h4>SELECT WAYPOINTS:</h4>
+      <button class="btn select-all-btn btn-teal" id="selectAllWaypoints">Select All</button>
+      <button class="btn select-all-btn btn-red" id="deselectAllWaypoints">Deselect All</button>
+      <div class="checkbox-list" id="waypointCheckboxList"></div>
+    </div>
+    <div class="selection-section" id="areaSelection">
+      <h4>SELECT AREAS:</h4>
+      <button class="btn select-all-btn btn-teal" id="selectAllAreas">Select All</button>
+      <button class="btn select-all-btn btn-red" id="deselectAllAreas">Deselect All</button>
+      <div class="checkbox-list" id="areaCheckboxList"></div>
+    </div>
+    <div style="margin-top:20px;" class="btn-row">
+      <button class="btn btn-green" id="confirmExportBtn" style="flex:1;padding:12px;">📤 EXPORT</button>
+      <button class="btn btn-red" id="cancelExportBtn" style="flex:1;padding:12px;">✖ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- INSECURE OVERLAY -->
+<div id="insecureOverlay" aria-hidden="true">
+  <div class="box">
+    <h2>⚠️ Security / Location Notice</h2>
+    <p>This page requires secure origin (HTTPS or localhost) for GPS to work properly.</p>
+    <p><b>Recommended:</b> Use your GitHub Pages HTTPS link.</p>
+    <p><a id="hideOverlay" class="btn small btn-green">I understand — continue anyway</a></p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const CORRECT_PASSWORD='Lilymaafroz245',PASSWORD_KEY='air_nav_authenticated';
+function checkAuthentication(){
+  localStorage.getItem(PASSWORD_KEY)==='true'
+    ?(document.getElementById('passwordScreen').style.display='none',initializeApp())
+    :document.getElementById('passwordScreen').style.display='flex';
+}
+document.getElementById('passwordSubmit').onclick=function(){
+  document.getElementById('passwordInput').value===CORRECT_PASSWORD
+    ?(localStorage.setItem(PASSWORD_KEY,'true'),document.getElementById('passwordScreen').style.display='none',document.getElementById('passwordError').style.display='none',initializeApp())
+    :(document.getElementById('passwordError').style.display='block',document.getElementById('passwordInput').value='',document.getElementById('passwordInput').focus());
+};
+document.getElementById('passwordInput').addEventListener('keypress',function(e){'Enter'===e.key&&document.getElementById('passwordSubmit').click()});
+
+function decimalToDMS(decimal,isLat){const absolute=Math.abs(decimal),degrees=Math.floor(absolute),minutes=(absolute-degrees)*60;return{degrees:degrees,minutes:minutes,direction:isLat?decimal>=0?'N':'S':decimal>=0?'E':'W'}}
+function DMSToDecimal(degrees,minutes,direction){let decimal=parseFloat(degrees)+parseFloat(minutes)/60;return('S'===direction||'W'===direction)&&(decimal=-decimal),decimal}
+function formatDMS(decimal,isLat){const dms=decimalToDMS(decimal,isLat);return`${dms.degrees}° ${dms.minutes.toFixed(3)}' ${dms.direction}`}
+
+const MARKER_TYPES={default:{color:'#ff0000',shape:'circle',label:'Default'},helipad:{color:'#000080',shape:'H',label:'Helipad'},star:{color:'#FFD700',shape:'star',label:'Important'},diamond:{color:'#C0C0C0',shape:'diamond',label:'Checkpoint'},triangle:{color:'#FFFFFF',shape:'triangle',label:'Marker'},airport:{color:'#00ff00',shape:'square',label:'Airport'}};
+
+function createMarkerIcon(type='default'){const markerType=MARKER_TYPES[type]||MARKER_TYPES.default;if('circle'===markerType.shape)return L.circleMarker([0,0],{radius:5,color:markerType.color,fillColor:markerType.color,fillOpacity:.9,weight:2});let svgIcon='';const color=markerType.color;switch(markerType.shape){case'H':svgIcon=`<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="16" height="16" fill="${color}" stroke="#000" stroke-width="1.5"/><text x="10" y="14" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">H</text></svg>`;break;case'star':svgIcon=`<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><polygon points="10,2 12,8 18,8 13,12 15,18 10,14 5,18 7,12 2,8 8,8" fill="${color}" stroke="#000" stroke-width="1"/></svg>`;break;case'diamond':svgIcon=`<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><polygon points="10,2 18,10 10,18 2,10" fill="${color}" stroke="#000" stroke-width="1.5"/></svg>`;break;case'triangle':svgIcon=`<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><polygon points="10,2 18,17 2,17" fill="${color}" stroke="#000" stroke-width="1.5"/></svg>`;break;case'square':svgIcon=`<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="14" height="14" fill="${color}" stroke="#000" stroke-width="1.5"/></svg>`}return L.divIcon({html:svgIcon,className:'custom-marker',iconSize:[20,20],iconAnchor:[10,10]})}
+
+function createHelicopterIcon(heading){const rotation=heading||0;const svgIcon=`<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${rotation}deg)"><g transform="translate(16,16)"><ellipse cx="0" cy="0" rx="12" ry="6" fill="#a52a2a" opacity="0.3"/><rect x="-1.5" y="-8" width="3" height="16" fill="#2c1810" rx="1"/><rect x="-10" y="-2" width="20" height="2" fill="#2c1810" rx="1"/><circle cx="0" cy="0" r="3" fill="#8b0000"/><line x1="-15" y1="-10" x2="15" y2="-10" stroke="#4a4a4a" stroke-width="1.5"/><path d="M 0,-8 L 3,-12 L 0,-11 L -3,-12 Z" fill="#2c1810"/></g></svg>`;return L.divIcon({html:svgIcon,className:'custom-marker',iconSize:[32,32],iconAnchor:[16,16]})}
+
+function initializeApp(){
+  const insecureOverlay=document.getElementById('insecureOverlay');
+  function checkSecureContextAndWarn(){const isLocalhost='localhost'===location.hostname||'127.0.0.1'===location.hostname;('https:'===location.protocol||isLocalhost)||(insecureOverlay.style.display='block',insecureOverlay.setAttribute('aria-hidden','false'))}
+  document.getElementById('hideOverlay').onclick=()=>{insecureOverlay.style.display='none',insecureOverlay.setAttribute('aria-hidden','true')};
+  checkSecureContextAndWarn();
+
+  const map=L.map('map',{zoomControl:!0,dragging:!0,touchZoom:!0,doubleClickZoom:!0,scrollWheelZoom:!0}).setView([23.685,90.3563],7);
+  const normalLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  const satelliteLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri, DigitalGlobe, GeoEye'});
+  let currentLayer='normal';
+  const mapToggleBtn=document.getElementById('mapToggleBtn');
+  mapToggleBtn.onclick=function(e){e.stopPropagation(),'normal'===currentLayer?(map.removeLayer(normalLayer),map.addLayer(satelliteLayer),currentLayer='satellite',mapToggleBtn.innerHTML='🗺️ NORMAL MAP',mapToggleBtn.style.background='#1a4a7a'):(map.removeLayer(satelliteLayer),map.addLayer(normalLayer),currentLayer='normal',mapToggleBtn.innerHTML='🛰️ SATELLITE',mapToggleBtn.style.background='#1a7a35')};
+
+  let waypoints=[],markers={},selected=[],routeLayer=null,checkpointMarkers=[],flyMarker=null,flyWatchId=null,directLayer=null,directTargetId=null,lastSpeedGPS=0,lastCourseGPS=0,areas=[],areaPolygons={},editingAreaId=null,measurementLine=null,measureStartMarker=null,measureEndMarker=null,measureActive=!1,movingTrackLine=null,movingTrackActive=!1,movingTrackUpdateInterval=null,pendingTapLocation=null;
+
+  const coordsOut=document.getElementById('coordsOut'),routeSummaryDiv=document.getElementById('routeSummary'),directSelect=document.getElementById('directSelect'),recenterBtn=document.getElementById('recenterBtn'),editAreaSelect=document.getElementById('editAreaSelect'),deleteAreaSelect=document.getElementById('deleteAreaSelect'),gpsInfoDiv=document.getElementById('gpsInfo'),gpsSpeedSpan=document.getElementById('gpsSpeed'),gpsCourseSpan=document.getElementById('gpsCourse'),measurementInfoDiv=document.getElementById('measurementInfo'),measureBtn=document.getElementById('measureBtn'),stopMeasureBtn=document.getElementById('stopMeasureBtn'),movingTrackOnBtn=document.getElementById('movingTrackOnBtn'),movingTrackOffBtn=document.getElementById('movingTrackOffBtn'),movingTrackInfoDiv=document.getElementById('movingTrackInfo'),trackDistanceSpan=document.getElementById('trackDistance'),trackCourseSpan=document.getElementById('trackCourse'),trackSpeedSpan=document.getElementById('trackSpeed');
+
+  // Waypoint list modal
+  document.getElementById('showWaypointListBtn').onclick=function(){
+    const modal=document.getElementById('waypointListModal'),content=document.getElementById('waypointListContent');
+    content.innerHTML='';
+    if(waypoints.length===0){content.innerHTML='<p style="text-align:center;color:var(--text-dim)">No waypoints saved yet</p>';}
+    else{waypoints.forEach(w=>{const markerType=MARKER_TYPES[w.markerType||'default'],div=document.createElement('div');div.className='modal-list-item';div.innerHTML=`<b style="color:var(--text)">${w.name}</b> <span style="color:${markerType.color};">●</span><br><span style="font-size:12px;color:var(--text-dim)">${formatDMS(w.lat,true)}, ${formatDMS(w.lon,false)} — ${markerType.label}</span>${w.info?`<div class="info-text">${w.info}</div>`:''}<div class="waypoint-actions" style="margin-top:6px"><a class="btn small btn-teal" onclick="editWaypoint(${w.id})">✏️ Edit</a><a class="btn small btn-red" onclick="deleteWaypoint(${w.id})">🗑️ Delete</a><a class="btn small btn-purple" onclick="selectWaypoint(${w.id})">🎯 Select</a></div>`;content.appendChild(div);});}
+    modal.style.display='block';
+  };
+  document.getElementById('closeWaypointListBtn').onclick=function(){document.getElementById('waypointListModal').style.display='none';};
+
+  // Area list modal
+  document.getElementById('showAreaListBtn').onclick=function(){
+    const modal=document.getElementById('areaListModal'),content=document.getElementById('areaListContent');
+    content.innerHTML='';
+    if(areas.length===0){content.innerHTML='<p style="text-align:center;color:var(--text-dim)">No areas saved yet</p>';}
+    else{areas.forEach(area=>{const div=document.createElement('div');div.className='modal-list-item';const areaTypeLabel=area.type==='circular'?'⭕ Circular':'📐 Polygon';const detailText=area.type==='circular'?`Diameter: ${area.diameter} NM, Center: ${area.centerWaypoint}`:`${area.corners.length} corners`;div.innerHTML=`<b style="color:var(--text)">${area.name}</b> <span style="color:${area.color||'#8b45c1'};">●</span> ${areaTypeLabel}<br><span style="font-size:12px;color:var(--text-dim)">${detailText}</span>${area.info?`<div class="info-text">${area.info}</div>`:''}`;content.appendChild(div);});}
+    modal.style.display='block';
+  };
+  document.getElementById('closeAreaListBtn').onclick=function(){document.getElementById('areaListModal').style.display='none';};
+
+  // Tap confirm
+  map.on('click',e=>{
+    if(measureActive)return;
+    pendingTapLocation={lat:e.latlng.lat,lon:e.latlng.lng};
+    coordsOut.textContent=formatDMS(e.latlng.lat,true)+', '+formatDMS(e.latlng.lng,false);
+    const modal=document.getElementById('tapConfirmModal');
+    document.getElementById('tapCoords').innerHTML=`<strong>Lat:</strong> ${formatDMS(e.latlng.lat,true)}<br><strong>Lon:</strong> ${formatDMS(e.latlng.lng,false)}`;
+    modal.style.display='block';
+  });
+  document.getElementById('confirmWaypointBtn').onclick=function(){if(pendingTapLocation){showWaypointCreationDialog(pendingTapLocation.lat,pendingTapLocation.lon);document.getElementById('tapConfirmModal').style.display='none';pendingTapLocation=null;}};
+  document.getElementById('cancelWaypointBtn').onclick=function(){document.getElementById('tapConfirmModal').style.display='none';pendingTapLocation=null;};
+
+  function showWaypointCreationDialog(lat,lon){const name=prompt('Enter waypoint name:','WP-'+(waypoints.length+1));if(name){const info=prompt('Enter waypoint info/notes (optional):','');addWaypoint(lat,lon,name,'default',info||'');}}
+
+  function renderList(){directSelect.innerHTML='<option value="">Select Waypoint</option>';waypoints.forEach(w=>{const opt=document.createElement('option');opt.value=w.id;opt.text=w.name;directSelect.appendChild(opt);});}
+
+  window.editWaypoint=function(id){const wp=waypoints.find(w=>w.id===id);if(!wp)return;const latDMS=decimalToDMS(wp.lat,!0),lonDMS=decimalToDMS(wp.lon,!1),editModal=document.createElement('div');editModal.className='modal-overlay';editModal.style.display='flex';editModal.style.alignItems='center';editModal.style.justifyContent='center';editModal.innerHTML=`<div class="modal-content" style="max-width:440px;"><h3>✏️ EDIT WAYPOINT</h3><label>NAME:</label><input type="text" id="editName" value="${wp.name}"><label>LATITUDE:</label><div style="display:flex;gap:5px;margin:5px 0;"><input type="number" id="editLatDeg" placeholder="Deg" value="${latDMS.degrees}" style="flex:1"><input type="number" step="0.001" id="editLatMin" placeholder="Min" value="${latDMS.minutes.toFixed(3)}" style="flex:1"><select id="editLatDir" style="flex:0.5"><option value="N" ${'N'===latDMS.direction?'selected':''}>N</option><option value="S" ${'S'===latDMS.direction?'selected':''}>S</option></select></div><label>LONGITUDE:</label><div style="display:flex;gap:5px;margin:5px 0;"><input type="number" id="editLonDeg" placeholder="Deg" value="${lonDMS.degrees}" style="flex:1"><input type="number" step="0.001" id="editLonMin" placeholder="Min" value="${lonDMS.minutes.toFixed(3)}" style="flex:1"><select id="editLonDir" style="flex:0.5"><option value="E" ${'E'===lonDMS.direction?'selected':''}>E</option><option value="W" ${'W'===lonDMS.direction?'selected':''}>W</option></select></div><label>MARKER TYPE:</label><div class="marker-type-grid" id="markerTypeGrid"></div><label>WAYPOINT INFO/NOTES:</label><textarea id="editInfo" rows="3">${wp.info||''}</textarea><div class="btn-row" style="margin-top:14px"><button class="btn btn-green" id="saveEdit">💾 SAVE</button><button class="btn btn-red" id="cancelEdit">✖ CANCEL</button></div></div>`;
+    document.body.appendChild(editModal);
+    const grid=editModal.querySelector('#markerTypeGrid');
+    Object.keys(MARKER_TYPES).forEach(typeKey=>{const type=MARKER_TYPES[typeKey],option=document.createElement('div');option.className='marker-type-option'+(wp.markerType===typeKey?' selected':'');option.dataset.type=typeKey;let iconPreview='';iconPreview='H'===type.shape?'<div style="width:16px;height:16px;background:'+type.color+';border:1.5px solid #000;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;color:#fff;font-size:11px;">H</div>':'star'===type.shape?'<span style="color:'+type.color+';font-size:16px;">★</span>':'diamond'===type.shape?'<span style="color:'+type.color+';font-size:16px;">◆</span>':'triangle'===type.shape?'<span style="color:'+type.color+';font-size:16px;">▲</span>':'square'===type.shape?'<span style="color:'+type.color+';font-size:16px;">■</span>':'<span style="color:'+type.color+';font-size:16px;">●</span>';option.innerHTML=`<div class="marker-icon-preview">${iconPreview}</div><div class="marker-type-label">${type.label}</div>`;option.onclick=function(){editModal.querySelectorAll('.marker-type-option').forEach(o=>o.classList.remove('selected'));this.classList.add('selected');};grid.appendChild(option);});
+    editModal.querySelector('#saveEdit').onclick=()=>{const newName=editModal.querySelector('#editName').value.trim(),latDeg=parseFloat(editModal.querySelector('#editLatDeg').value),latMin=parseFloat(editModal.querySelector('#editLatMin').value),latDir=editModal.querySelector('#editLatDir').value,lonDeg=parseFloat(editModal.querySelector('#editLonDeg').value),lonMin=parseFloat(editModal.querySelector('#editLonMin').value),lonDir=editModal.querySelector('#editLonDir').value,selectedType=editModal.querySelector('.marker-type-option.selected')?.dataset.type||'default',newInfo=editModal.querySelector('#editInfo').value.trim();newName&&(wp.name=newName);isNaN(latDeg)||isNaN(latMin)||(wp.lat=DMSToDecimal(latDeg,latMin,latDir));isNaN(lonDeg)||isNaN(lonMin)||(wp.lon=DMSToDecimal(lonDeg,lonMin,lonDir));wp.markerType=selectedType;wp.info=newInfo;map.removeLayer(markers[id]);const newMarker=createMarkerForWaypoint(wp);markers[id]=newMarker;renderList();saveLocal();document.body.removeChild(editModal);};
+    editModal.querySelector('#cancelEdit').onclick=()=>{document.body.removeChild(editModal);};
+  };
+
+  function createMarkerForWaypoint(wp){const markerType=MARKER_TYPES[wp.markerType||'default'];let marker;marker='circle'===markerType.shape?L.circleMarker([wp.lat,wp.lon],{radius:5,color:markerType.color,fillColor:markerType.color,fillOpacity:.9,weight:2}).addTo(map):L.marker([wp.lat,wp.lon],{icon:createMarkerIcon(wp.markerType||'default')}).addTo(map);const popupContent=`<b>${wp.name}</b><br>${formatDMS(wp.lat,true)}, ${formatDMS(wp.lon,false)}<br>${markerType.label}${wp.info?'<br><i>'+wp.info+'</i>':''}<br><a href="#" onclick="editWaypoint(${wp.id})">Edit</a>`;marker.bindPopup(popupContent);marker.on('click',()=>window.selectWaypoint(wp.id));return marker;}
+
+  window.deleteWaypoint=function(id){confirm('Delete this waypoint?')&&(waypoints=waypoints.filter(w=>w.id!==id),map.removeLayer(markers[id]),delete markers[id],renderList(),saveLocal());};
+  window.selectWaypoint=function(id){const idx=selected.indexOf(id);-1===idx?selected.push(id):selected.splice(idx,1);waypoints.forEach(wp=>{const marker=markers[wp.id];if(!marker)return;const isSelected=selected.includes(wp.id),markerType=MARKER_TYPES[wp.markerType||'default'];marker instanceof L.CircleMarker&&marker.setStyle({color:isSelected?'#00f':markerType.color,fillColor:isSelected?'#00f':markerType.color});});};
+
+  function addWaypoint(lat,lon,name,markerType='default',info=''){const id=Date.now()+Math.floor(999*Math.random()),wp={id:id,lat:lat,lon:lon,name:name||'WP-'+(waypoints.length+1),markerType:markerType,info:info};waypoints.push(wp);const marker=createMarkerForWaypoint(wp);markers[id]=marker;renderList();saveLocal();}
+  function addWaypointNoSave(lat,lon,name,markerType='default',info=''){const id=Date.now()+Math.floor(999*Math.random()),wp={id:id,lat:lat,lon:lon,name:name||'WP-'+(waypoints.length+1),markerType:markerType,info:info};waypoints.push(wp);const marker=createMarkerForWaypoint(wp);markers[id]=marker;renderList();}
+
+  function makeRoute(){if(selected.length<2)return void alert('Select at least 2 waypoints');routeLayer&&map.removeLayer(routeLayer);checkpointMarkers.forEach(cp=>map.removeLayer(cp));checkpointMarkers=[];const latlngs=selected.map(id=>{const w=waypoints.find(wp=>wp.id===id);return[w.lat,w.lon]});routeLayer=L.polyline(latlngs,{color:'#ff9100',weight:3}).addTo(map);updateRouteSummary();routeLayer.on('click',e=>addCheckpoint(e.latlng));}
+
+  function updateRouteSummary(){if(!(selected.length<2)){let cumulativeDistance=0,cumulativeTimeInput=0,cumulativeTimeGPS=0;const speedInput=parseFloat(document.getElementById('speedInput').value)||0;routeSummaryDiv.innerHTML='';for(let i=0;i<selected.length-1;i++){const a=waypoints.find(w=>w.id===selected[i]),b=waypoints.find(w=>w.id===selected[i+1]),dist=haversineNM(a.lat,a.lon,b.lat,b.lon);cumulativeDistance+=dist;const timeInput=speedInput>0?dist/speedInput*60:0,timeGPS=lastSpeedGPS>0?dist/lastSpeedGPS*60:0;cumulativeTimeInput+=timeInput;cumulativeTimeGPS+=timeGPS;const brg=bearing(a.lat,a.lon,b.lat,b.lon);routeSummaryDiv.innerHTML+=`<b>${a.name} → ${b.name}</b>: ${dist.toFixed(2)} NM, ${brg.toFixed(1)}°, ETA: ${timeInput.toFixed(1)} min<br>`;}routeSummaryDiv.innerHTML+=`<b>TOTAL: ${cumulativeDistance.toFixed(2)} NM, ETA: ${cumulativeTimeInput.toFixed(1)} min</b>`;}}
+
+  function addCheckpoint(latlng){let prevLatLng;if(checkpointMarkers.length>0)prevLatLng=checkpointMarkers[checkpointMarkers.length-1].getLatLng();else if(selected.length>0){const firstWp=waypoints.find(w=>w.id===selected[0]);prevLatLng={lat:firstWp.lat,lng:firstWp.lon};}else prevLatLng=flyMarker?flyMarker.getLatLng():map.getCenter();const dist=haversineNM(prevLatLng.lat,prevLatLng.lng,latlng.lat,latlng.lng),inputSpeed=parseFloat(document.getElementById('speedInput').value)||0,etaInput=inputSpeed>0?(dist/inputSpeed*60).toFixed(1)+' min':'N/A',etaGPS=lastSpeedGPS>0?(dist/lastSpeedGPS*60).toFixed(1)+' min':'N/A',cpMarker=L.circleMarker([latlng.lat,latlng.lng],{radius:4,color:'#0a0',fillColor:'#0a0',fillOpacity:.8}).addTo(map);cpMarker.bindPopup(`Checkpoint<br>Distance: ${dist.toFixed(2)} NM<br>ETA Input: ${etaInput}<br>ETA GPS: ${etaGPS}`).openPopup();cpMarker.bindTooltip(`Dist: ${dist.toFixed(2)} NM, ETA: ${etaInput}`,{permanent:!0,direction:'top'});checkpointMarkers.push(cpMarker);}
+
+  function clearRoute(){routeLayer&&map.removeLayer(routeLayer);routeLayer=null;checkpointMarkers.forEach(cp=>map.removeLayer(cp));checkpointMarkers=[];selected=[];routeSummaryDiv.innerHTML='';waypoints.forEach(wp=>{const marker=markers[wp.id];if(!marker)return;const markerType=MARKER_TYPES[wp.markerType||'default'];marker instanceof L.CircleMarker&&marker.setStyle({color:markerType.color,fillColor:markerType.color});});}
+
+  function renderAreaList(){editAreaSelect.innerHTML='<option value="">Select Area to Edit</option>';deleteAreaSelect.innerHTML='<option value="">Select Area to Delete</option>';areas.forEach(area=>{const editOpt=document.createElement('option');editOpt.value=area.id;editOpt.text=area.name;editAreaSelect.appendChild(editOpt);const delOpt=document.createElement('option');delOpt.value=area.id;delOpt.text=area.name;deleteAreaSelect.appendChild(delOpt);});}
+
+  function drawArea(area){
+    areaPolygons[area.id]&&map.removeLayer(areaPolygons[area.id]);
+    if(area.type==='circular'){const centerWp=waypoints.find(w=>w.name===area.centerWaypoint);if(!centerWp)return;const radiusMeters=(area.diameter/2)*1852;const circle=L.circle([centerWp.lat,centerWp.lon],{radius:radiusMeters,color:area.color||'#ff0000',fillColor:'transparent',fillOpacity:0,weight:3}).addTo(map);circle.bindTooltip(area.name,{permanent:true,direction:'center',className:'area-label',opacity:0.8});areaPolygons[area.id]=circle;}
+    else{const latlngs=area.corners.map(c=>[c.lat,c.lon]);const areaColor=area.color||'#8b45c1';const polygon=L.polygon(latlngs,{color:areaColor,fillColor:areaColor,fillOpacity:0.2,weight:2}).addTo(map);polygon.bindTooltip(area.name,{permanent:true,direction:'center',className:'area-label',opacity:0.8});areaPolygons[area.id]=polygon;}
+  }
+
+  function showAreaModal(editMode=false,areaId=null){
+    const modal=document.getElementById('areaModal'),modalTitle=document.getElementById('modalTitle'),polygonSection=document.getElementById('polygonSection'),circularSection=document.getElementById('circularSection'),numCornersInput=document.getElementById('numCorners'),cornerInputsDiv=document.getElementById('cornerInputs'),nameSection=document.getElementById('nameSection'),areaNameInput=document.getElementById('areaName'),areaInfoInput=document.getElementById('areaInfo'),circularWaypointSelect=document.getElementById('circularWaypointSelect');
+    modal.style.display='block';cornerInputsDiv.innerHTML='';nameSection.style.display='none';
+    circularWaypointSelect.innerHTML='<option value="">Choose waypoint as center</option>';
+    waypoints.forEach(w=>{const opt=document.createElement('option');opt.value=w.name;opt.text=w.name;circularWaypointSelect.appendChild(opt);});
+    document.querySelectorAll('.color-option').forEach(opt=>opt.classList.remove('selected'));
+    document.querySelectorAll('.circular-color-option').forEach(opt=>opt.classList.remove('selected'));
+    document.querySelectorAll('.area-type-option').forEach(opt=>opt.classList.remove('selected'));
+    document.querySelector('.area-type-option[data-type="polygon"]').classList.add('selected');
+    polygonSection.style.display='block';circularSection.style.display='none';
+    if(editMode&&areaId){editingAreaId=areaId;const area=areas.find(a=>a.id===areaId);if(!area)return;modalTitle.textContent='EDIT AREA';if(area.type==='circular'){document.querySelector('.area-type-option[data-type="circular"]').classList.add('selected');document.querySelector('.area-type-option[data-type="polygon"]').classList.remove('selected');polygonSection.style.display='none';circularSection.style.display='block';document.getElementById('circularWaypointSelect').value=area.centerWaypoint;document.getElementById('circularDiameter').value=area.diameter;document.getElementById('circularAreaName').value=area.name;document.getElementById('circularAreaInfo').value=area.info||'';const selectedColor=area.color||'#ff0000';document.querySelectorAll('.circular-color-option').forEach(opt=>{if(opt.dataset.color===selectedColor)opt.classList.add('selected');});}else{numCornersInput.value=area.corners.length;areaNameInput.value=area.name;areaInfoInput.value=area.info||'';const selectedColor=area.color||'#dc3545';document.querySelectorAll('.color-option').forEach(opt=>{if(opt.dataset.color===selectedColor)opt.classList.add('selected');});createCornerInputs(area.corners.length,area.corners);}}
+    else{editingAreaId=null;modalTitle.textContent='CREATE NEW AREA';numCornersInput.value='';areaNameInput.value='';areaInfoInput.value='';document.getElementById('circularDiameter').value='';document.getElementById('circularAreaName').value='';document.getElementById('circularAreaInfo').value='';document.querySelector('.color-option[data-color="#dc3545"]').classList.add('selected');document.querySelector('.circular-color-option[data-color="#ff0000"]').classList.add('selected');}
+  }
+
+  document.querySelectorAll('.area-type-option').forEach(option=>{option.onclick=function(){document.querySelectorAll('.area-type-option').forEach(o=>o.classList.remove('selected'));this.classList.add('selected');const type=this.dataset.type,polygonSection=document.getElementById('polygonSection'),circularSection=document.getElementById('circularSection');if(type==='polygon'){polygonSection.style.display='block';circularSection.style.display='none';}else{polygonSection.style.display='none';circularSection.style.display='block';}};});
+
+  document.querySelectorAll('.color-option').forEach(option=>{option.onclick=function(){document.querySelectorAll('.color-option').forEach(o=>o.classList.remove('selected'));this.classList.add('selected');};});
+  document.querySelectorAll('.circular-color-option').forEach(option=>{option.onclick=function(){document.querySelectorAll('.circular-color-option').forEach(o=>o.classList.remove('selected'));this.classList.add('selected');};});
+
+  function createCornerInputs(numCorners,existingCorners=[]){const cornerInputsDiv=document.getElementById('cornerInputs'),nameSection=document.getElementById('nameSection');cornerInputsDiv.innerHTML='';for(let i=0;i<numCorners;i++){const corner=existingCorners[i];let latDMS={degrees:'',minutes:'',direction:'N'},lonDMS={degrees:'',minutes:'',direction:'E'};corner&&(latDMS=decimalToDMS(corner.lat,!0),lonDMS=decimalToDMS(corner.lon,!1));const cornerDiv=document.createElement('div');cornerDiv.className='corner-input';cornerDiv.innerHTML=`<label>CORNER ${i+1}:</label><div style="display:flex;gap:3px;margin:3px 0;"><input type="number" id="lat_deg_${i}" placeholder="Lat °" value="${corner?latDMS.degrees:''}" style="flex:1;padding:6px;font-size:13px;"><input type="number" step="0.001" id="lat_min_${i}" placeholder="Min" value="${corner?latDMS.minutes.toFixed(3):''}" style="flex:1;padding:6px;font-size:13px;"><select id="lat_dir_${i}" style="flex:0.5;padding:6px;font-size:13px;"><option value="N" ${'N'===latDMS.direction?'selected':''}>N</option><option value="S" ${'S'===latDMS.direction?'selected':''}>S</option></select></div><div style="display:flex;gap:3px;margin:3px 0;"><input type="number" id="lon_deg_${i}" placeholder="Lon °" value="${corner?lonDMS.degrees:''}" style="flex:1;padding:6px;font-size:13px;"><input type="number" step="0.001" id="lon_min_${i}" placeholder="Min" value="${corner?lonDMS.minutes.toFixed(3):''}" style="flex:1;padding:6px;font-size:13px;"><select id="lon_dir_${i}" style="flex:0.5;padding:6px;font-size:13px;"><option value="E" ${'E'===lonDMS.direction?'selected':''}>E</option><option value="W" ${'W'===lonDMS.direction?'selected':''}>W</option></select></div>`;cornerInputsDiv.appendChild(cornerDiv);}nameSection.style.display='block';}
+
+  function saveArea(){const numCorners=parseInt(document.getElementById('numCorners').value),areaName=document.getElementById('areaName').value.trim(),areaInfo=document.getElementById('areaInfo').value.trim(),selectedColorOption=document.querySelector('.color-option.selected'),areaColor=selectedColorOption?selectedColorOption.dataset.color:'#dc3545';if(!areaName)return void alert('Please enter an area name');const corners=[];for(let i=0;i<numCorners;i++){const latDeg=parseFloat(document.getElementById(`lat_deg_${i}`).value),latMin=parseFloat(document.getElementById(`lat_min_${i}`).value),latDir=document.getElementById(`lat_dir_${i}`).value,lonDeg=parseFloat(document.getElementById(`lon_deg_${i}`).value),lonMin=parseFloat(document.getElementById(`lon_min_${i}`).value),lonDir=document.getElementById(`lon_dir_${i}`).value;if(isNaN(latDeg)||isNaN(latMin)||isNaN(lonDeg)||isNaN(lonMin))return void alert(`Invalid coordinates for corner ${i+1}`);const lat=DMSToDecimal(latDeg,latMin,latDir),lon=DMSToDecimal(lonDeg,lonMin,lonDir);corners.push({lat:lat,lon:lon});}if(editingAreaId){const area=areas.find(a=>a.id===editingAreaId);area&&(area.name=areaName,area.corners=corners,area.color=areaColor,area.info=areaInfo,area.type='polygon',drawArea(area));}else{const id=Date.now()+Math.floor(999*Math.random()),newArea={id:id,name:areaName,corners:corners,color:areaColor,info:areaInfo,type:'polygon'};areas.push(newArea);drawArea(newArea);}renderAreaList();saveLocal();closeAreaModal();}
+
+  function saveCircularArea(){const waypointName=document.getElementById('circularWaypointSelect').value,diameter=parseFloat(document.getElementById('circularDiameter').value),areaName=document.getElementById('circularAreaName').value.trim(),areaInfo=document.getElementById('circularAreaInfo').value.trim(),selectedColorOption=document.querySelector('.circular-color-option.selected'),areaColor=selectedColorOption?selectedColorOption.dataset.color:'#ff0000';if(!waypointName)return alert('Please select a waypoint');if(isNaN(diameter)||diameter<=0)return alert('Please enter a valid diameter');if(!areaName)return alert('Please enter an area name');if(editingAreaId){const area=areas.find(a=>a.id===editingAreaId);if(area){area.name=areaName;area.centerWaypoint=waypointName;area.diameter=diameter;area.color=areaColor;area.info=areaInfo;area.type='circular';drawArea(area);}}else{const id=Date.now()+Math.floor(999*Math.random()),newArea={id:id,name:areaName,centerWaypoint:waypointName,diameter:diameter,color:areaColor,info:areaInfo,type:'circular'};areas.push(newArea);drawArea(newArea);}renderAreaList();saveLocal();closeAreaModal();}
+
+  function closeAreaModal(){document.getElementById('areaModal').style.display='none';editingAreaId=null;}
+
+  function deleteArea(areaId){confirm('Delete this area?')&&(areas=areas.filter(a=>a.id!==areaId),areaPolygons[areaId]&&(map.removeLayer(areaPolygons[areaId]),delete areaPolygons[areaId]),renderAreaList(),saveLocal());}
+
+  function showExportModal(){const modal=document.getElementById('exportModal'),waypointSelection=document.getElementById('waypointSelection'),areaSelection=document.getElementById('areaSelection');modal.style.display='block';waypointSelection.style.display='none';areaSelection.style.display='none';document.querySelectorAll('.export-option').forEach(opt=>opt.classList.remove('selected'));populateWaypointCheckboxes();populateAreaCheckboxes();}
+  function populateWaypointCheckboxes(){const list=document.getElementById('waypointCheckboxList');list.innerHTML='';waypoints.forEach(wp=>{const markerType=MARKER_TYPES[wp.markerType||'default'],div=document.createElement('div');div.className='checkbox-item';div.innerHTML=`<label><input type="checkbox" value="${wp.id}" class="waypoint-checkbox"> <span style="color:${markerType.color};">●</span> <b>${wp.name}</b> — ${formatDMS(wp.lat,!0)}, ${formatDMS(wp.lon,!1)}</label>`;list.appendChild(div);});}
+  function populateAreaCheckboxes(){const list=document.getElementById('areaCheckboxList');list.innerHTML='';areas.forEach(area=>{const div=document.createElement('div');div.className='checkbox-item';div.innerHTML=`<label><input type="checkbox" value="${area.id}" class="area-checkbox"> <span style="color:${area.color||'#8b45c1'};">●</span> <b>${area.name}</b> — ${area.type==='circular'?'Circular':area.corners.length+' corners'}</label>`;list.appendChild(div);});}
+
+  document.querySelectorAll('.export-option').forEach(option=>{option.onclick=function(){document.querySelectorAll('.export-option').forEach(o=>o.classList.remove('selected'));this.classList.add('selected');const type=this.dataset.type,waypointSelection=document.getElementById('waypointSelection'),areaSelection=document.getElementById('areaSelection');waypointSelection.style.display='none';areaSelection.style.display='none';'selected-waypoints'===type?waypointSelection.style.display='block':'selected-areas'===type?areaSelection.style.display='block':'custom'===type&&(waypointSelection.style.display='block',areaSelection.style.display='block');};});
+
+  document.getElementById('selectAllWaypoints').onclick=function(){document.querySelectorAll('.waypoint-checkbox').forEach(cb=>cb.checked=!0);};
+  document.getElementById('deselectAllWaypoints').onclick=function(){document.querySelectorAll('.waypoint-checkbox').forEach(cb=>cb.checked=!1);};
+  document.getElementById('selectAllAreas').onclick=function(){document.querySelectorAll('.area-checkbox').forEach(cb=>cb.checked=!0);};
+  document.getElementById('deselectAllAreas').onclick=function(){document.querySelectorAll('.area-checkbox').forEach(cb=>cb.checked=!1);};
+
+  document.getElementById('confirmExportBtn').onclick=function(){const selectedOption=document.querySelector('.export-option.selected');if(!selectedOption)return void alert('Please select an export option');const type=selectedOption.dataset.type;let exportWaypoints=[],exportAreas=[];switch(type){case'all':exportWaypoints=waypoints;exportAreas=areas;break;case'waypoints-only':exportWaypoints=waypoints;break;case'areas-only':exportAreas=areas;break;case'selected-waypoints':const selectedWpIds=Array.from(document.querySelectorAll('.waypoint-checkbox:checked')).map(cb=>parseInt(cb.value));if(0===selectedWpIds.length)return void alert('Please select at least one waypoint');exportWaypoints=waypoints.filter(wp=>selectedWpIds.includes(wp.id));break;case'selected-areas':const selectedAreaIds=Array.from(document.querySelectorAll('.area-checkbox:checked')).map(cb=>parseInt(cb.value));if(0===selectedAreaIds.length)return void alert('Please select at least one area');exportAreas=areas.filter(area=>selectedAreaIds.includes(area.id));break;case'custom':const customWpIds=Array.from(document.querySelectorAll('.waypoint-checkbox:checked')).map(cb=>parseInt(cb.value)),customAreaIds=Array.from(document.querySelectorAll('.area-checkbox:checked')).map(cb=>parseInt(cb.value));if(0===customWpIds.length&&0===customAreaIds.length)return void alert('Please select at least one waypoint or area');exportWaypoints=waypoints.filter(wp=>customWpIds.includes(wp.id));exportAreas=areas.filter(area=>customAreaIds.includes(area.id));}const exportData={waypoints:exportWaypoints,areas:exportAreas},blob=new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='waypoints_areas.json';a.click();closeExportModal();};
+  document.getElementById('cancelExportBtn').onclick=closeExportModal;
+  function closeExportModal(){document.getElementById('exportModal').style.display='none';}
+
+  async function ensureGeolocationPermission(){if(!('geolocation'in navigator))return alert('Geolocation not supported'),!1;if(navigator.permissions&&navigator.permissions.query)try{const status=await navigator.permissions.query({name:'geolocation'});return'granted'===status.state||('prompt'===status.state?new Promise(res=>{navigator.geolocation.getCurrentPosition(()=>res(!0),()=>res(!1),{enableHighAccuracy:!0,maximumAge:1e3,timeout:1e4})}):(alert('Location permission is denied. Enable location for this site in your browser settings.'),!1))}catch(e){}return new Promise(res=>{navigator.geolocation.getCurrentPosition(()=>res(!0),()=>res(!1),{enableHighAccuracy:!0,maximumAge:1e3,timeout:1e4})})}
+
+  function startFlying(){if(flyMarker)return alert('Already flying');const isLocalhost='localhost'===location.hostname||'127.0.0.1'===location.hostname;return'https:'===location.protocol||isLocalhost?void ensureGeolocationPermission().then(ok=>{ok&&(gpsInfoDiv.style.display='block',flyMarker=L.marker([0,0],{icon:createHelicopterIcon(0)}).addTo(map),flyWatchId=navigator.geolocation.watchPosition(pos=>{const lat=pos.coords.latitude,lon=pos.coords.longitude,speed=1.94384*(pos.coords.speed||0),heading=null!==pos.coords.heading&&void 0!==pos.coords.heading?pos.coords.heading:lastCourseGPS;updateGPSInfo(speed,heading);flyMarker.setLatLng([lat,lon]);coordsOut.textContent=formatDMS(lat,!0)+', '+formatDMS(lon,!1);map.setView([lat,lon]);updateRouteSummary();movingTrackActive&&updateMovingTrack();},err=>{alert('Error getting location: '+(err.message||err.code));},{enableHighAccuracy:!0,maximumAge:1e3}))}):void alert('Geolocation needs HTTPS or localhost.');}
+
+  function stopFlying(){flyWatchId&&navigator.geolocation.clearWatch(flyWatchId);flyMarker&&map.removeLayer(flyMarker);flyMarker=null;flyWatchId=null;gpsInfoDiv.style.display='none';movingTrackActive&&stopMovingTrack();}
+
+  function startDirectTo(){if(!directSelect.value)return alert('Select waypoint first');directTargetId=parseInt(directSelect.value);const isLocalhost='localhost'===location.hostname||'127.0.0.1'===location.hostname;return'https:'===location.protocol||isLocalhost?void ensureGeolocationPermission().then(ok=>{ok&&(gpsInfoDiv.style.display='block',directLayer&&map.removeLayer(directLayer),directLayer=L.polyline([],{color:'#ff00ff',weight:2,dashArray:'4'}).addTo(map),flyMarker||(flyMarker=L.marker([0,0],{icon:createHelicopterIcon(0)}).addTo(map)),flyWatchId=navigator.geolocation.watchPosition(pos=>{const lat=pos.coords.latitude,lon=pos.coords.longitude,speed=1.94384*(pos.coords.speed||0),heading=null!==pos.coords.heading&&void 0!==pos.coords.heading?pos.coords.heading:lastCourseGPS;updateGPSInfo(speed,heading);flyMarker.setLatLng([lat,lon]);coordsOut.textContent=formatDMS(lat,!0)+', '+formatDMS(lon,!1);map.setView([lat,lon]);const target=waypoints.find(w=>w.id===directTargetId);if(!target)return;const dist=haversineNM(lat,lon,target.lat,target.lon),inputSpeed=parseFloat(document.getElementById('speedInput').value)||0,etaInput=inputSpeed>0?(dist/inputSpeed*60).toFixed(1)+' min':'N/A',etaGPS=lastSpeedGPS>0?(dist/lastSpeedGPS*60).toFixed(1)+' min':'N/A',brg=bearing(lat,lon,target.lat,target.lon);routeSummaryDiv.innerHTML=`<b>DIRECT-TO ${target.name}</b><br>Distance: ${dist.toFixed(2)} NM<br>Bearing: ${brg.toFixed(1)}°<br>ETA Input: ${etaInput}<br>ETA GPS: ${etaGPS}`;directLayer.setLatLngs([[lat,lon],[target.lat,target.lon]]);movingTrackActive&&updateMovingTrack();},err=>{alert('Error getting location: '+(err.message||err.code));},{enableHighAccuracy:!0,maximumAge:1e3}))})  :void alert('Geolocation needs HTTPS or localhost.');}
+
+  function stopDirectTo(){flyWatchId&&navigator.geolocation.clearWatch(flyWatchId);directLayer&&map.removeLayer(directLayer);directLayer=null;directTargetId=null;routeSummaryDiv.innerHTML='';flyMarker&&(map.removeLayer(flyMarker),flyMarker=null);flyWatchId=null;gpsInfoDiv.style.display='none';movingTrackActive&&stopMovingTrack();}
+
+  function saveLocal(){try{localStorage.setItem('map_waypoints_v6',JSON.stringify(waypoints));localStorage.setItem('map_areas_v3',JSON.stringify(areas));}catch(e){alert('Error saving data: '+e.message);}}
+
+  function loadLocal(){const data=localStorage.getItem('map_waypoints_v6');if(data)try{const arr=JSON.parse(data);arr.forEach(w=>addWaypointNoSave(w.lat,w.lon,w.name,w.markerType||'default',w.info||''));}catch(e){console.error('Error loading waypoints:',e);}const areaData=localStorage.getItem('map_areas_v3');if(areaData)try{const loadedAreas=JSON.parse(areaData);loadedAreas.forEach(area=>{area.color||(area.color=area.type==='circular'?'#ff0000':'#8b45c1');area.info||(area.info='');area.type||(area.type='polygon');areas.push(area);drawArea(area);});renderAreaList();}catch(e){alert('Error loading areas: '+e.message);}}
+
+  function haversineNM(lat1,lon1,lat2,lon2){const R=6371e3,toRad=v=>v*Math.PI/180,φ1=toRad(lat1),φ2=toRad(lat2),Δφ=toRad(lat2-lat1),Δλ=toRad(lon2-lon1),a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))/1852}
+  function bearing(lat1,lon1,lat2,lon2){const toRad=v=>v*Math.PI/180,toDeg=v=>180*v/Math.PI,φ1=toRad(lat1),φ2=toRad(lat2),λ1=toRad(lon1),λ2=toRad(lon2),y=Math.sin(λ2-λ1)*Math.cos(φ2),x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);return(toDeg(Math.atan2(y,x))+360)%360}
+  function destinationPoint(lat,lon,bearing,distanceNM){const R=6371e3,distanceM=1852*distanceNM,toRad=v=>v*Math.PI/180,toDeg=v=>180*v/Math.PI,φ1=toRad(lat),λ1=toRad(lon),brng=toRad(bearing),δ=distanceM/R,φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(brng)),λ2=λ1+Math.atan2(Math.sin(brng)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));return{lat:toDeg(φ2),lon:toDeg(λ2)}}
+
+  function updateGPSInfo(speed,heading){lastSpeedGPS=speed;lastCourseGPS=heading;gpsSpeedSpan.textContent=speed.toFixed(1)+' kts';gpsCourseSpan.textContent=heading.toFixed(1)+'°';if(flyMarker){flyMarker.setIcon(createHelicopterIcon(heading));}}
+
+  function startMovingTrack(){return flyMarker?(movingTrackActive=!0,movingTrackInfoDiv.style.display='block',updateMovingTrack(),movingTrackUpdateInterval=setInterval(updateMovingTrack,1e3),void 0):void alert('Moving Track only works in Flying Mode.');}
+  function stopMovingTrack(){movingTrackActive=!1;movingTrackInfoDiv.style.display='none';movingTrackUpdateInterval&&(clearInterval(movingTrackUpdateInterval),movingTrackUpdateInterval=null);movingTrackLine&&(map.removeLayer(movingTrackLine),movingTrackLine=null);}
+  function updateMovingTrack(){if(movingTrackActive&&flyMarker){const currentPos=flyMarker.getLatLng(),currentSpeed=lastSpeedGPS,currentCourse=lastCourseGPS,timeMinutes=20,distanceNM=currentSpeed*timeMinutes/60;trackDistanceSpan.textContent=distanceNM.toFixed(2)+' NM';trackCourseSpan.textContent=currentCourse.toFixed(1)+'°';trackSpeedSpan.textContent=currentSpeed.toFixed(1)+' kts';const endPoint=destinationPoint(currentPos.lat,currentPos.lng,currentCourse,distanceNM);movingTrackLine&&map.removeLayer(movingTrackLine);movingTrackLine=L.polyline([[currentPos.lat,currentPos.lng],[endPoint.lat,endPoint.lon]],{color:'#00ff00',weight:3,opacity:.8,dashArray:'10, 10',interactive:!1}).addTo(map);}}
+
+  function startMeasureTool(){measureActive=!0;measureBtn.style.display='none';stopMeasureBtn.style.display='block';const center=map.getCenter(),bounds=map.getBounds(),latSpan=.2*(bounds.getNorth()-bounds.getSouth()),lonSpan=.2*(bounds.getEast()-bounds.getWest()),startPoint=L.latLng(center.lat-latSpan,center.lng-lonSpan),endPoint=L.latLng(center.lat+latSpan,center.lng+lonSpan);measurementLine=L.polyline([startPoint,endPoint],{color:'#ff00ff',weight:8,opacity:.8,interactive:!1}).addTo(map);const createBigEndpointIcon=()=>L.divIcon({html:'<div style="width:40px;height:40px;background:transparent;border:5px solid #ff00ff;border-radius:50%;box-shadow:0 3px 10px rgba(0,0,0,0.5);"></div>',className:'',iconSize:[40,40],iconAnchor:[20,20]});measureStartMarker=L.marker(startPoint,{icon:createBigEndpointIcon(),draggable:!0,zIndexOffset:3e3}).addTo(map);measureEndMarker=L.marker(endPoint,{icon:createBigEndpointIcon(),draggable:!0,zIndexOffset:3e3}).addTo(map);measureStartMarker.on('drag',function(){const start=measureStartMarker.getLatLng(),end=measureEndMarker.getLatLng();measurementLine.setLatLngs([start,end]);updateMeasurementDisplay();});measureEndMarker.on('drag',function(){const start=measureStartMarker.getLatLng(),end=measureEndMarker.getLatLng();measurementLine.setLatLngs([start,end]);updateMeasurementDisplay();});updateMeasurementDisplay();measurementInfoDiv.style.display='block';}
+
+  function stopMeasureTool(){measureActive=!1;measureBtn.style.display='block';stopMeasureBtn.style.display='none';measurementInfoDiv.style.display='none';measurementLine&&(map.removeLayer(measurementLine),measurementLine=null);measureStartMarker&&(map.removeLayer(measureStartMarker),measureStartMarker=null);measureEndMarker&&(map.removeLayer(measureEndMarker),measureEndMarker=null);}
+
+  function updateMeasurementDisplay(){if(measureStartMarker&&measureEndMarker){const startPoint=measureStartMarker.getLatLng(),endPoint=measureEndMarker.getLatLng(),dist=haversineNM(startPoint.lat,startPoint.lng,endPoint.lat,endPoint.lng),brgAB=bearing(startPoint.lat,startPoint.lng,endPoint.lat,endPoint.lng),brgBA=bearing(endPoint.lat,endPoint.lng,startPoint.lat,startPoint.lng);document.getElementById('measureDist').textContent=dist.toFixed(2)+' NM';document.getElementById('measureBrgAB').textContent=brgAB.toFixed(1)+'°';document.getElementById('measureBrgBA').textContent=brgBA.toFixed(1)+'°';}}
+
+  measureBtn.onclick=function(e){e.stopPropagation();startMeasureTool();};
+  stopMeasureBtn.onclick=function(e){e.stopPropagation();stopMeasureTool();};
+  movingTrackOnBtn.onclick=function(e){e.stopPropagation();startMovingTrack();};
+  movingTrackOffBtn.onclick=function(e){e.stopPropagation();stopMovingTrack();};
+
+  recenterBtn.onclick=()=>{flyMarker?map.setView(flyMarker.getLatLng()):alert('Flying or Direct-To mode not active');};
+  document.getElementById('goBtn').onclick=()=>{const latDeg=parseFloat(document.getElementById('latDeg').value),latMin=parseFloat(document.getElementById('latMin').value),latDir=document.getElementById('latDir').value,lonDeg=parseFloat(document.getElementById('lonDeg').value),lonMin=parseFloat(document.getElementById('lonMin').value),lonDir=document.getElementById('lonDir').value;if(isNaN(latDeg)||isNaN(latMin)||isNaN(lonDeg)||isNaN(lonMin))return void alert('Invalid coordinates');const lat=DMSToDecimal(latDeg,latMin,latDir),lon=DMSToDecimal(lonDeg,lonMin,lonDir);map.setView([lat,lon],Math.max(map.getZoom(),12));addWaypoint(lat,lon,'Manual');};
+  document.getElementById('routeBtn').onclick=makeRoute;
+  document.getElementById('clearRouteBtn').onclick=clearRoute;
+  document.getElementById('saveBtn').onclick=()=>{saveLocal();alert('Saved waypoints and areas!');};
+  document.getElementById('exportBtn').onclick=showExportModal;
+  document.getElementById('importBtn').onclick=()=>{try{const importData=JSON.parse(document.getElementById('jsonArea').value);importData.waypoints&&importData.waypoints.forEach(w=>addWaypoint(w.lat,w.lon,w.name,w.markerType||'default',w.info||''));importData.areas&&(importData.areas.forEach(area=>{area.color||(area.color=area.type==='circular'?'#ff0000':'#8b45c1');area.info||(area.info='');area.type||(area.type='polygon');area.id||(area.id=Date.now()+Math.floor(999*Math.random()));areas.push(area);drawArea(area);}),renderAreaList());saveLocal();alert('Imported successfully');}catch(e){alert('Invalid JSON: '+e.message);}};
+  document.getElementById('startFlyBtn').onclick=startFlying;
+  document.getElementById('stopFlyBtn').onclick=stopFlying;
+  document.getElementById('startDirectBtn').onclick=startDirectTo;
+  document.getElementById('stopDirectBtn').onclick=stopDirectTo;
+  document.getElementById('createAreaBtn').onclick=()=>showAreaModal(!1);
+  document.getElementById('setCornerBtn').onclick=()=>{const numCorners=parseInt(document.getElementById('numCorners').value);return isNaN(numCorners)||numCorners<3?void alert('Please enter at least 3 corners'):void createCornerInputs(numCorners);};
+  document.getElementById('saveAreaBtn').onclick=saveArea;
+  document.getElementById('saveCircularAreaBtn').onclick=saveCircularArea;
+  document.getElementById('cancelAreaBtn').onclick=closeAreaModal;
+  document.getElementById('cancelCircularAreaBtn').onclick=closeAreaModal;
+  document.getElementById('editAreaBtn').onclick=()=>{const areaId=parseInt(editAreaSelect.value);return areaId?void showAreaModal(!0,areaId):void alert('Please select an area to edit');};
+  document.getElementById('deleteAreaBtn').onclick=()=>{const areaId=parseInt(deleteAreaSelect.value);return areaId?void deleteArea(areaId):void alert('Please select an area to delete');};
+
+  loadLocal();
+}
+
+checkAuthentication();
+
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').then(reg=>console.log('SW registered',reg.scope)).catch(err=>console.error('SW registration failed',err));});}
+</script>
+</body>
+</html>
